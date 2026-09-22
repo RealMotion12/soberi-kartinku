@@ -25,12 +25,16 @@ jobs:
           mkdir project
           unzip -q ./*.zip -d project
 
-      - name: Fix JVM target
+      - name: Create JVM compatibility fix
+        working-directory: project
         run: |
-          find project -type f \( -name "*.gradle" -o -name "*.gradle.kts" \) -print0 | while IFS= read -r -d '' file; do
-            sed -i 's/JavaVersion.VERSION_1_8/JavaVersion.VERSION_17/g' "$file"
-            sed -i 's/jvmTarget[[:space:]]*=[[:space:]]*["'\'']1\.8["'\'']/jvmTarget = "17"/g' "$file"
-          done
+          cat > fix-jvm.gradle <<'EOF'
+          allprojects {
+              tasks.withType(JavaCompile).configureEach {
+                  options.release = 17
+              }
+          }
+          EOF
 
       - name: Install Gradle
         run: |
@@ -41,7 +45,7 @@ jobs:
       - name: Build APK
         working-directory: project
         run: |
-          gradle assembleDebug --no-daemon
+          gradle assembleDebug --no-daemon --init-script fix-jvm.gradle
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
