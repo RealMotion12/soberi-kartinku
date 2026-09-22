@@ -26,35 +26,57 @@ jobs:
           mkdir project
           unzip -q soberi-kartinku-android.zip -d project
 
-      - name: Fix JVM compatibility
+      - name: Fix Android JVM settings
         working-directory: project
         run: |
-          python3 - <<'PY'
-          from pathlib import Path
+          cat > app/build.gradle.kts <<'EOF'
+          plugins {
+              id("com.android.application")
+              id("org.jetbrains.kotlin.android")
+          }
 
-          p = Path("app/build.gradle.kts")
-          s = p.read_text()
+          android {
+              namespace = "com.realmotion12.soberikartinku"
+              compileSdk = 35
 
-          s = s.replace(
-              'sourceCompatibility = JavaVersion.VERSION_17',
-              'sourceCompatibility = JavaVersion.VERSION_1_8'
-          )
+              defaultConfig {
+                  applicationId = "com.realmotion12.soberikartinku"
+                  minSdk = 23
+                  targetSdk = 35
+                  versionCode = 1
+                  versionName = "1.0"
+              }
 
-          s = s.replace(
-              'targetCompatibility = JavaVersion.VERSION_17',
-              'targetCompatibility = JavaVersion.VERSION_1_8'
-          )
+              compileOptions {
+                  sourceCompatibility = JavaVersion.VERSION_17
+                  targetCompatibility = JavaVersion.VERSION_17
+              }
+          }
 
-          s = s.replace(
-              'jvmTarget = "17"',
-              'jvmTarget = "1.8"'
-          )
+          kotlin {
+              jvmToolchain(17)
 
-          p.write_text(s)
+              compilerOptions {
+                  jvmTarget.set(
+                      org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17
+                  )
+              }
+          }
 
-          print("===== FINAL app/build.gradle.kts =====")
-          print(p.read_text())
-          PY
+          tasks.withType<org.gradle.api.tasks.compile.JavaCompile>().configureEach {
+              sourceCompatibility = "17"
+              targetCompatibility = "17"
+          }
+
+          tasks.withType<org.jetbrains.kotlin.gradle.tasks.KotlinCompilationTask<*>>().configureEach {
+              compilerOptions.jvmTarget.set(
+                  org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17
+              )
+          }
+          EOF
+
+          echo "===== FINAL app/build.gradle.kts ====="
+          cat app/build.gradle.kts
 
       - name: Install Gradle
         run: |
@@ -62,7 +84,8 @@ jobs:
           unzip -q gradle-8.7-bin.zip
           echo "$PWD/gradle-8.7/bin" >> "$GITHUB_PATH"
 
-      - name: Show Java and Gradle versions
+      - name: Check Gradle environment
+        working-directory: project
         run: |
           java -version
           gradle --version
