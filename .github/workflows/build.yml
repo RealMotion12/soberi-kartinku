@@ -26,7 +26,7 @@ jobs:
           mkdir project
           unzip -q soberi-kartinku-android.zip -d project
 
-      - name: Fix Android JVM settings
+      - name: Fix Java JVM target
         working-directory: project
         run: |
           python3 - <<'PY'
@@ -35,24 +35,16 @@ jobs:
           file = Path("app/build.gradle.kts")
           text = file.read_text()
 
-          imports = """import org.gradle.api.tasks.compile.JavaCompile
-          import org.jetbrains.kotlin.gradle.dsl.JvmTarget
-          import org.jetbrains.kotlin.gradle.tasks.KotlinCompilationTask
-
-          """
+          imp = "import org.gradle.api.tasks.compile.JavaCompile\n"
 
           if "import org.gradle.api.tasks.compile.JavaCompile" not in text:
-              text = imports + text
+              text = imp + text
 
           fix = """
 
           tasks.withType<JavaCompile>().configureEach {
               sourceCompatibility = "17"
               targetCompatibility = "17"
-          }
-
-          tasks.withType<KotlinCompilationTask<*>>().configureEach {
-              compilerOptions.jvmTarget.set(JvmTarget.JVM_17)
           }
           """
 
