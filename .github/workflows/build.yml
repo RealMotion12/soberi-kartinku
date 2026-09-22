@@ -26,7 +26,7 @@ jobs:
           mkdir project
           unzip -q soberi-kartinku-android.zip -d project
 
-      - name: Fix Android JVM settings
+      - name: Configure Android project
         working-directory: project
         run: |
           cat > app/build.gradle.kts <<'EOF'
@@ -43,8 +43,8 @@ jobs:
                   applicationId = "com.realmotion12.soberikartinku"
                   minSdk = 23
                   targetSdk = 35
-                  versionCode = 1
-                  versionName = "1.0"
+                  versionCode = 2
+                  versionName = "2.0"
               }
 
               compileOptions {
@@ -69,14 +69,622 @@ jobs:
           }
           EOF
 
-          echo "===== FINAL app/build.gradle.kts ====="
-          cat app/build.gradle.kts
-
-      - name: Install Gradle
+      - name: Replace game
+        working-directory: project
         run: |
-          wget -q https://services.gradle.org/distributions/gradle-8.7-bin.zip
-          unzip -q gradle-8.7-bin.zip
-          echo "$PWD/gradle-8.7/bin" >> "$GITHUB_PATH"
+          mkdir -p app/src/main/java/com/realmotion12/soberikartinku
+
+          cat > app/src/main/java/com/realmotion12/soberikartinku/MainActivity.kt <<'EOF'
+          package com.realmotion12.soberikartinku
+
+          import android.app.Activity
+          import android.content.Intent
+          import android.graphics.Bitmap
+          import android.graphics.Canvas
+          import android.graphics.Color
+          import android.graphics.Paint
+          import android.graphics.Rect
+          import android.net.Uri
+          import android.os.Bundle
+          import android.os.Handler
+          import android.os.Looper
+          import android.provider.MediaStore
+          import android.view.Gravity
+          import android.view.MotionEvent
+          import android.view.View
+          import android.widget.Button
+          import android.widget.LinearLayout
+          import android.widget.TextView
+          import android.widget.Toast
+          import java.io.InputStream
+          import kotlin.math.min
+
+          class MainActivity : Activity() {
+
+              private lateinit var puzzleView: PuzzleView
+              private lateinit var movesText: TextView
+              private lateinit var timerText: TextView
+              private lateinit var sizeText: TextView
+
+              private var gridSize = 3
+              private var moves = 0
+              private var seconds = 0
+              private var gameStarted = false
+              private var gameFinished = false
+
+              private val handler = Handler(Looper.getMainLooper())
+
+              private val timerRunnable = object : Runnable {
+                  override fun run() {
+                      if (gameStarted && !gameFinished) {
+                          seconds++
+                          updateTimer()
+                          handler.postDelayed(this, 1000)
+                      }
+                  }
+              }
+
+              override fun onCreate(savedInstanceState: Bundle?) {
+                  super.onCreate(savedInstanceState)
+
+                  window.statusBarColor = Color.rgb(7, 18, 32)
+                  window.navigationBarColor = Color.rgb(7, 18, 32)
+
+                  createInterface()
+              }
+
+              private fun createInterface() {
+                  val root = LinearLayout(this)
+                  root.orientation = LinearLayout.VERTICAL
+                  root.setBackgroundColor(Color.rgb(7, 18, 32))
+                  root.setPadding(20, 20, 20, 20)
+
+                  val title = TextView(this)
+                  title.text = "СОБЕРИ КАРТИНКУ"
+                  title.setTextColor(Color.WHITE)
+                  title.textSize = 27f
+                  title.gravity = Gravity.CENTER
+                  title.setPadding(0, 5, 0, 4)
+                  root.addView(
+                      title,
+                      LinearLayout.LayoutParams(
+                          LinearLayout.LayoutParams.MATCH_PARENT,
+                          LinearLayout.LayoutParams.WRAP_CONTENT
+                      )
+                  )
+
+                  val subtitle = TextView(this)
+                  subtitle.text = "Собери изображение из кусочков"
+                  subtitle.setTextColor(Color.rgb(160, 180, 200))
+                  subtitle.textSize = 14f
+                  subtitle.gravity = Gravity.CENTER
+                  root.addView(
+                      subtitle,
+                      LinearLayout.LayoutParams(
+                          LinearLayout.LayoutParams.MATCH_PARENT,
+                          LinearLayout.LayoutParams.WRAP_CONTENT
+                      )
+                  )
+
+                  sizeText = TextView(this)
+                  sizeText.text = "3 × 3"
+                  sizeText.setTextColor(Color.WHITE)
+                  sizeText.textSize = 17f
+                  sizeText.gravity = Gravity.CENTER
+                  sizeText.setPadding(0, 15, 0, 8)
+                  root.addView(sizeText)
+
+                  val stats = LinearLayout(this)
+                  stats.orientation = LinearLayout.HORIZONTAL
+                  stats.gravity = Gravity.CENTER
+
+                  timerText = makeStatText("⏱ 00:00")
+                  movesText = makeStatText("↔ Ходы: 0")
+
+                  stats.addView(
+                      timerText,
+                      LinearLayout.LayoutParams(0, 55, 1f).apply {
+                          setMargins(4, 4, 4, 4)
+                      }
+                  )
+
+                  stats.addView(
+                      movesText,
+                      LinearLayout.LayoutParams(0, 55, 1f).apply {
+                          setMargins(4, 4, 4, 4)
+                      }
+                  )
+
+                  root.addView(stats)
+
+                  puzzleView = PuzzleView(this)
+                  root.addView(
+                      puzzleView,
+                      LinearLayout.LayoutParams(
+                          LinearLayout.LayoutParams.MATCH_PARENT,
+                          0,
+                          1f
+                      ).apply {
+                          setMargins(0, 12, 0, 12)
+                      }
+                  )
+
+                  val sizes = LinearLayout(this)
+                  sizes.orientation = LinearLayout.HORIZONTAL
+
+                  addButton(sizes, "3 × 3") {
+                      changeSize(3)
+                  }
+
+                  addButton(sizes, "4 × 4") {
+                      changeSize(4)
+                  }
+
+                  addButton(sizes, "5 × 5") {
+                      changeSize(5)
+                  }
+
+                  root.addView(sizes)
+
+                  val controls = LinearLayout(this)
+                  controls.orientation = LinearLayout.HORIZONTAL
+
+                  addButton(controls, "🔀") {
+                      startNewGame()
+                  }
+
+                  addButton(controls, "💡") {
+                      giveHint()
+                  }
+
+                  addButton(controls, "📷") {
+                      openGallery()
+                  }
+
+                  root.addView(controls)
+
+                  val restart = Button(this)
+                  restart.text = "НОВАЯ ИГРА"
+                  restart.textSize = 15f
+                  restart.setTextColor(Color.WHITE)
+                  restart.setBackgroundColor(Color.rgb(30, 120, 240))
+                  restart.setOnClickListener {
+                      startNewGame()
+                  }
+
+                  root.addView(
+                      restart,
+                      LinearLayout.LayoutParams(
+                          LinearLayout.LayoutParams.MATCH_PARENT,
+                          58
+                      ).apply {
+                          setMargins(0, 8, 0, 0)
+                      }
+                  )
+
+                  setContentView(root)
+                  startNewGame()
+              }
+
+              private fun makeStatText(text: String): TextView {
+                  val view = TextView(this)
+                  view.text = text
+                  view.textSize = 16f
+                  view.gravity = Gravity.CENTER
+                  view.setTextColor(Color.WHITE)
+                  view.setBackgroundColor(Color.rgb(20, 36, 55))
+                  return view
+              }
+
+              private fun addButton(
+                  parent: LinearLayout,
+                  text: String,
+                  action: () -> Unit
+              ) {
+                  val button = Button(this)
+                  button.text = text
+                  button.textSize = 13f
+                  button.setTextColor(Color.WHITE)
+                  button.setOnClickListener { action() }
+
+                  parent.addView(
+                      button,
+                      LinearLayout.LayoutParams(
+                          0,
+                          58,
+                          1f
+                      ).apply {
+                          setMargins(3, 3, 3, 3)
+                      }
+                  )
+              }
+
+              private fun changeSize(size: Int) {
+                  gridSize = size
+                  sizeText.text = "$size × $size"
+                  startNewGame()
+              }
+
+              private fun startNewGame() {
+                  moves = 0
+                  seconds = 0
+                  gameStarted = true
+                  gameFinished = false
+
+                  updateMoves()
+                  updateTimer()
+
+                  puzzleView.resetPuzzle()
+                  handler.removeCallbacks(timerRunnable)
+                  handler.postDelayed(timerRunnable, 1000)
+              }
+
+              private fun updateMoves() {
+                  movesText.text = "↔ Ходы: $moves"
+              }
+
+              private fun updateTimer() {
+                  val minutes = seconds / 60
+                  val sec = seconds % 60
+                  timerText.text = String.format("⏱ %02d:%02d", minutes, sec)
+              }
+
+              private fun giveHint() {
+                  if (gameFinished) return
+
+                  val index = puzzleView.findWrongTile()
+
+                  if (index < 0) return
+
+                  val correctTile = index
+
+                  var other = -1
+
+                  for (i in puzzleView.tiles.indices) {
+                      if (puzzleView.tiles[i] == correctTile) {
+                          other = i
+                          break
+                      }
+                  }
+
+                  if (other >= 0 && other != index) {
+                      val temp = puzzleView.tiles[index]
+                      puzzleView.tiles[index] = puzzleView.tiles[other]
+                      puzzleView.tiles[other] = temp
+
+                      moves++
+                      updateMoves()
+                      puzzleView.invalidate()
+
+                      checkWin()
+                  }
+              }
+
+              private fun checkWin() {
+                  if (puzzleView.isSolved()) {
+                      gameFinished = true
+                      gameStarted = false
+                      handler.removeCallbacks(timerRunnable)
+
+                      Toast.makeText(
+                          this,
+                          "🎉 Отлично! Картинка собрана!",
+                          Toast.LENGTH_LONG
+                      ).show()
+                  }
+              }
+
+              private fun openGallery() {
+                  val intent = Intent(
+                      Intent.ACTION_PICK,
+                      MediaStore.Images.Media.EXTERNAL_CONTENT_URI
+                  )
+                  startActivityForResult(intent, 1001)
+              }
+
+              @Deprecated("Deprecated Android API, but compatible with API 23+")
+              override fun onActivityResult(
+                  requestCode: Int,
+                  resultCode: Int,
+                  data: Intent?
+              ) {
+                  super.onActivityResult(requestCode, resultCode, data)
+
+                  if (requestCode == 1001 &&
+                      resultCode == RESULT_OK &&
+                      data?.data != null
+                  ) {
+                      try {
+                          val uri = data.data!!
+                          val input: InputStream? =
+                              contentResolver.openInputStream(uri)
+
+                          val bitmap = android.graphics.BitmapFactory
+                              .decodeStream(input)
+
+                          input?.close()
+
+                          if (bitmap != null) {
+                              puzzleView.setImage(bitmap)
+                              startNewGame()
+                              Toast.makeText(
+                                  this,
+                                  "Фото загружено",
+                                  Toast.LENGTH_SHORT
+                              ).show()
+                          }
+                      } catch (e: Exception) {
+                          Toast.makeText(
+                              this,
+                              "Не удалось открыть изображение",
+                              Toast.LENGTH_SHORT
+                          ).show()
+                      }
+                  }
+              }
+
+              inner class PuzzleView(context: android.content.Context) :
+                  View(context) {
+
+                  var tiles = IntArray(gridSize * gridSize) { it }
+
+                  private var sourceBitmap: Bitmap = createDefaultImage()
+                  private val paint = Paint(Paint.ANTI_ALIAS_FLAG)
+                  private val tilePaint = Paint(Paint.ANTI_ALIAS_FLAG)
+                  private var selected = -1
+
+                  fun resetPuzzle() {
+                      tiles = IntArray(gridSize * gridSize) { it }
+
+                      for (i in tiles.indices.reversed()) {
+                          val j = (0..i).random()
+                          val temp = tiles[i]
+                          tiles[i] = tiles[j]
+                          tiles[j] = temp
+                      }
+
+                      if (isSolved() && tiles.size > 1) {
+                          val temp = tiles[0]
+                          tiles[0] = tiles[1]
+                          tiles[1] = temp
+                      }
+
+                      selected = -1
+                      invalidate()
+                  }
+
+                  fun setImage(bitmap: Bitmap) {
+                      sourceBitmap = cropSquare(bitmap)
+                      invalidate()
+                  }
+
+                  override fun onDraw(canvas: Canvas) {
+                      super.onDraw(canvas)
+
+                      val side = min(width, height)
+                      val left = (width - side) / 2f
+                      val top = (height - side) / 2f
+
+                      paint.color = Color.rgb(15, 28, 44)
+                      canvas.drawRoundRect(
+                          left,
+                          top,
+                          left + side,
+                          top + side,
+                          18f,
+                          18f,
+                          paint
+                      )
+
+                      val tileSize = side / gridSize
+
+                      for (position in tiles.indices) {
+                          val tile = tiles[position]
+
+                          val row = tile / gridSize
+                          val col = tile % gridSize
+
+                          val src = Rect(
+                              col * sourceBitmap.width / gridSize,
+                              row * sourceBitmap.height / gridSize,
+                              (col + 1) * sourceBitmap.width / gridSize,
+                              (row + 1) * sourceBitmap.height / gridSize
+                          )
+
+                          val dst = Rect(
+                              (left + (position % gridSize) * tileSize).toInt(),
+                              (top + (position / gridSize) * tileSize).toInt(),
+                              (left + ((position % gridSize) + 1) * tileSize).toInt(),
+                              (top + ((position / gridSize) + 1) * tileSize).toInt()
+                          )
+
+                          canvas.drawBitmap(sourceBitmap, src, dst, tilePaint)
+
+                          paint.style = Paint.Style.STROKE
+                          paint.strokeWidth = 2f
+
+                          paint.color =
+                              if (position == selected) {
+                                  Color.rgb(40, 210, 255)
+                              } else {
+                                  Color.rgb(7, 18, 32)
+                              }
+
+                          canvas.drawRect(
+                              dst.left.toFloat(),
+                              dst.top.toFloat(),
+                              dst.right.toFloat(),
+                              dst.bottom.toFloat(),
+                              paint
+                          )
+
+                          paint.style = Paint.Style.FILL
+                      }
+                  }
+
+                  override fun onTouchEvent(event: MotionEvent): Boolean {
+                      if (event.action != MotionEvent.ACTION_UP) {
+                          return true
+                      }
+
+                      val side = min(width, height)
+                      val left = (width - side) / 2f
+                      val top = (height - side) / 2f
+                      val tileSize = side / gridSize
+
+                      if (event.x < left ||
+                          event.x > left + side ||
+                          event.y < top ||
+                          event.y > top + side
+                      ) {
+                          return true
+                      }
+
+                      val col =
+                          ((event.x - left) / tileSize).toInt()
+
+                      val row =
+                          ((event.y - top) / tileSize).toInt()
+
+                      val position = row * gridSize + col
+
+                      if (selected == -1) {
+                          selected = position
+                          invalidate()
+                          return true
+                      }
+
+                      if (selected == position) {
+                          selected = -1
+                          invalidate()
+                          return true
+                      }
+
+                      val temp = tiles[selected]
+                      tiles[selected] = tiles[position]
+                      tiles[position] = temp
+
+                      selected = -1
+                      moves++
+                      updateMoves()
+                      invalidate()
+
+                      checkWin()
+
+                      return true
+                  }
+
+                  fun isSolved(): Boolean {
+                      for (i in tiles.indices) {
+                          if (tiles[i] != i) return false
+                      }
+                      return true
+                  }
+
+                  fun findWrongTile(): Int {
+                      for (i in tiles.indices) {
+                          if (tiles[i] != i) {
+                              return i
+                          }
+                      }
+                      return -1
+                  }
+
+                  private fun cropSquare(bitmap: Bitmap): Bitmap {
+                      val side = min(
+                          bitmap.width,
+                          bitmap.height
+                      )
+
+                      val x = (bitmap.width - side) / 2
+                      val y = (bitmap.height - side) / 2
+
+                      return Bitmap.createBitmap(
+                          bitmap,
+                          x,
+                          y,
+                          side,
+                          side
+                      )
+                  }
+
+                  private fun createDefaultImage(): Bitmap {
+                      val size = 900
+                      val bitmap = Bitmap.createBitmap(
+                          size,
+                          size,
+                          Bitmap.Config.ARGB_8888
+                      )
+
+                      val canvas = Canvas(bitmap)
+
+                      val sky = Paint()
+                      sky.color = Color.rgb(45, 115, 180)
+                      canvas.drawRect(
+                          0f,
+                          0f,
+                          size.toFloat(),
+                          size.toFloat(),
+                          sky
+                      )
+
+                      val sun = Paint(Paint.ANTI_ALIAS_FLAG)
+                      sun.color = Color.rgb(255, 215, 100)
+                      canvas.drawCircle(690f, 190f, 80f, sun)
+
+                      val mountainBack = Paint(Paint.ANTI_ALIAS_FLAG)
+                      mountainBack.color = Color.rgb(75, 105, 125)
+
+                      val back = android.graphics.Path()
+                      back.moveTo(0f, 520f)
+                      back.lineTo(230f, 190f)
+                      back.lineTo(420f, 500f)
+                      back.lineTo(620f, 140f)
+                      back.lineTo(900f, 510f)
+                      back.close()
+                      canvas.drawPath(back, mountainBack)
+
+                      val mountainFront = Paint(Paint.ANTI_ALIAS_FLAG)
+                      mountainFront.color = Color.rgb(30, 65, 80)
+
+                      val front = android.graphics.Path()
+                      front.moveTo(0f, 610f)
+                      front.lineTo(280f, 300f)
+                      front.lineTo(470f, 590f)
+                      front.lineTo(700f, 250f)
+                      front.lineTo(900f, 610f)
+                      front.close()
+                      canvas.drawPath(front, mountainFront)
+
+                      val lake = Paint(Paint.ANTI_ALIAS_FLAG)
+                      lake.color = Color.rgb(30, 135, 165)
+                      canvas.drawRect(
+                          0f,
+                          610f,
+                          size.toFloat(),
+                          size.toFloat(),
+                          lake
+                      )
+
+                      val reflection = Paint(Paint.ANTI_ALIAS_FLAG)
+                      reflection.color = Color.rgb(80, 180, 195)
+
+                      for (i in 0 until 10) {
+                          val y = 650f + i * 23f
+                          canvas.drawRect(
+                              100f + i * 20f,
+                              y,
+                              800f - i * 20f,
+                              y + 5f,
+                              reflection
+                          )
+                      }
+
+                      return bitmap
+                  }
+              }
+          }
+          EOF
 
       - name: Check Gradle environment
         working-directory: project
