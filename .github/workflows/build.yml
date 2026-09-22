@@ -26,7 +26,7 @@ jobs:
           mkdir project
           unzip -q soberi-kartinku-android.zip -d project
 
-      - name: Verify project JVM settings
+      - name: Verify project
         working-directory: project
         run: |
           echo "===== app/build.gradle.kts ====="
@@ -40,10 +40,22 @@ jobs:
           unzip -q gradle-8.7-bin.zip
           echo "$PWD/gradle-8.7/bin" >> "$GITHUB_PATH"
 
+      - name: Force Java 17
+        working-directory: project
+        run: |
+          cat > jvm-fix.gradle <<'EOF'
+          allprojects {
+              tasks.withType(org.gradle.api.tasks.compile.JavaCompile).configureEach {
+                  sourceCompatibility = "17"
+                  targetCompatibility = "17"
+              }
+          }
+          EOF
+
       - name: Build APK
         working-directory: project
         run: |
-          gradle assembleDebug --no-daemon
+          gradle -I jvm-fix.gradle assembleDebug --no-daemon
 
       - name: Upload APK
         if: success()
