@@ -26,13 +26,35 @@ jobs:
           mkdir project
           unzip -q soberi-kartinku-android.zip -d project
 
-      - name: Verify project
+      - name: Fix JVM compatibility
         working-directory: project
         run: |
-          echo "===== app/build.gradle.kts ====="
-          cat app/build.gradle.kts
-          echo "===== gradle.properties ====="
-          cat gradle.properties
+          python3 - <<'PY'
+          from pathlib import Path
+
+          p = Path("app/build.gradle.kts")
+          s = p.read_text()
+
+          s = s.replace(
+              'sourceCompatibility = JavaVersion.VERSION_17',
+              'sourceCompatibility = JavaVersion.VERSION_1_8'
+          )
+
+          s = s.replace(
+              'targetCompatibility = JavaVersion.VERSION_17',
+              'targetCompatibility = JavaVersion.VERSION_1_8'
+          )
+
+          s = s.replace(
+              'jvmTarget = "17"',
+              'jvmTarget = "1.8"'
+          )
+
+          p.write_text(s)
+
+          print("===== FINAL app/build.gradle.kts =====")
+          print(p.read_text())
+          PY
 
       - name: Install Gradle
         run: |
@@ -40,22 +62,15 @@ jobs:
           unzip -q gradle-8.7-bin.zip
           echo "$PWD/gradle-8.7/bin" >> "$GITHUB_PATH"
 
-      - name: Force Java 17
-        working-directory: project
+      - name: Show Java and Gradle versions
         run: |
-          cat > jvm-fix.gradle <<'EOF'
-          allprojects {
-              tasks.withType(org.gradle.api.tasks.compile.JavaCompile).configureEach {
-                  sourceCompatibility = "17"
-                  targetCompatibility = "17"
-              }
-          }
-          EOF
+          java -version
+          gradle --version
 
       - name: Build APK
         working-directory: project
         run: |
-          gradle -I jvm-fix.gradle assembleDebug --no-daemon
+          gradle assembleDebug --no-daemon
 
       - name: Upload APK
         if: success()
