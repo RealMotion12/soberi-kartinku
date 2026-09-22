@@ -23,13 +23,13 @@ jobs:
         run: |
           rm -rf project
           mkdir project
-         
-        unzip -q soberi-kartinku-android.zip -d project
+          unzip -q soberi-kartinku-android.zip -d project
+
       - name: Fix JVM target
         run: |
           find project -type f \( -name "*.gradle" -o -name "*.gradle.kts" \) -exec sed -i 's/1\.8/17/g; s/VERSION_1_8/VERSION_17/g' {} +
+
       - name: Install Gradle
-        run: |
           wget -q https://services.gradle.org/distributions/gradle-8.7-bin.zip
           unzip -q gradle-8.7-bin.zip
           echo "$PWD/gradle-8.7/bin" >> $GITHUB_PATH
