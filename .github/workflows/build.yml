@@ -20,11 +20,19 @@ jobs:
           distribution: temurin
           java-version: '17'
 
-      - name: Prepare project
+      - name: Prepare Android project
         run: |
           rm -rf project
           mkdir project
           unzip -q soberi-kartinku-android.zip -d project
+
+      - name: Verify project JVM settings
+        working-directory: project
+        run: |
+          echo "===== app/build.gradle.kts ====="
+          cat app/build.gradle.kts
+          echo "===== gradle.properties ====="
+          cat gradle.properties
 
       - name: Install Gradle
         run: |
@@ -34,9 +42,11 @@ jobs:
 
       - name: Build APK
         working-directory: project
-        run: gradle assembleDebug --no-daemon
+        run: |
+          gradle assembleDebug --no-daemon
 
       - name: Upload APK
+        if: success()
         uses: actions/upload-artifact@v4
         with:
           name: Soberi-Kartinku-APK
