@@ -26,35 +26,52 @@ jobs:
           mkdir project
           unzip -q soberi-kartinku-android.zip -d project
 
+      - name: Fix Android JVM settings
+        working-directory: project
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          file = Path("app/build.gradle.kts")
+          text = file.read_text()
+
+          imports = """import org.gradle.api.tasks.compile.JavaCompile
+          import org.jetbrains.kotlin.gradle.dsl.JvmTarget
+          import org.jetbrains.kotlin.gradle.tasks.KotlinCompilationTask
+
+          """
+
+          if "import org.gradle.api.tasks.compile.JavaCompile" not in text:
+              text = imports + text
+
+          fix = """
+
+          tasks.withType<JavaCompile>().configureEach {
+              sourceCompatibility = "17"
+              targetCompatibility = "17"
+          }
+
+          tasks.withType<KotlinCompilationTask<*>>().configureEach {
+              compilerOptions.jvmTarget.set(JvmTarget.JVM_17)
+          }
+          """
+
+          if "tasks.withType<JavaCompile>()" not in text:
+              text += fix
+
+          file.write_text(text)
+          PY
+
       - name: Install Gradle
         run: |
           wget -q https://services.gradle.org/distributions/gradle-8.7-bin.zip
           unzip -q gradle-8.7-bin.zip
           echo "$PWD/gradle-8.7/bin" >> "$GITHUB_PATH"
 
-      - name: Force Java and Kotlin JVM 17
-        working-directory: project
-        run: |
-          cat > jvm-fix.gradle <<'EOF'
-          import org.gradle.api.tasks.compile.JavaCompile
-          import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
-
-          allprojects {
-              tasks.withType(JavaCompile).configureEach {
-                  sourceCompatibility = "17"
-                  targetCompatibility = "17"
-              }
-
-              tasks.withType(KotlinCompile).configureEach {
-                  kotlinOptions.jvmTarget = "17"
-              }
-          }
-          EOF
-
       - name: Build APK
         working-directory: project
         run: |
-          gradle -I jvm-fix.gradle assembleDebug --no-daemon
+          gradle assembleDebug --no-daemon
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
