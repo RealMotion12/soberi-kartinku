@@ -25,11 +25,9 @@ jobs:
           mkdir project
          
         unzip -q soberi-kartinku-android.zip -d project
-      - name: Fix Java and Kotlin JVM target
+           - name: Fix JVM target
         run: |
-          find project -type f \( -name "*.gradle" -o -name "*.gradle.kts" \) -exec sed -i \
-            -e 's/JavaVersion.VERSION_1_8/JavaVersion.VERSION_17/g' \
-            -e 's/jvmTarget = ["'"'"']1\.8["'"'"']/jvmTarget = "17"/g' \
+          find project -type f \( -name "*.gradle" -o -name "*.gradle.kts" \) -exec sed -i 's/1\.8/17/g; s/VERSION_1_8/VERSION_17/g' {} +
             {} +
       - name: Install Gradle
         run: |
