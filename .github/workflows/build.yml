@@ -24,7 +24,27 @@ jobs:
         run: |
           rm -rf project
           mkdir project
+
           unzip -q ParkControl-v4-ui.zip -d project
+
+          echo "=== ZIP CONTENT ==="
+          find project -maxdepth 4 -type f | sort
+
+          ROOT=$(dirname "$(find project -name settings.gradle.kts -print -quit)")
+
+          if [ -z "$ROOT" ] || [ "$ROOT" = "." ]; then
+            echo "ERROR: settings.gradle.kts not found"
+            exit 1
+          fi
+
+          echo "Detected project root: $ROOT"
+
+          if [ "$ROOT" != "project" ]; then
+            cp -a "$ROOT"/. project/
+          fi
+
+          echo "=== PROJECT ==="
+          find project -maxdepth 3 -type f | sort
 
       - name: Configure Android project
         working-directory: project
@@ -43,8 +63,8 @@ jobs:
                   applicationId = "com.realmotion12.soberikartinku"
                   minSdk = 23
                   targetSdk = 35
-                  versionCode = 30
-                  versionName = "3.0"
+                  versionCode = 40
+                  versionName = "4.0"
               }
 
               compileOptions {
@@ -78,5 +98,5 @@ jobs:
         if: success()
         uses: actions/upload-artifact@v4
         with:
-          name: ParkControl-APK-v3
+          name: ParkControl-APK-v4
           path: project/app/build/outputs/apk/debug/*.apk
