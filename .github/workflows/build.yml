@@ -24,7 +24,7 @@ jobs:
         run: |
           rm -rf project
           mkdir project
-          unzip -q ParkControl-v3-fixed.zip -d project
+          unzip -q ParkControl-v3-final.zip -d project
 
       - name: Configure Android project
         working-directory: project
