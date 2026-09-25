@@ -13,7 +13,7 @@ jobs:
 
       - name: Extract iOS project
         run: |
-          unzip -q ParkControl-iOS-ReleaseCandidate-v5.zip
+          unzip -q ParkControl-iOS-GitHub-FIXED.zip
           echo "Project files:"
           find ParkControl-iOS -maxdepth 2 -type f | head -50
 
