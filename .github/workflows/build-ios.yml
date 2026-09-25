@@ -1,0 +1,40 @@
+name: Build ParkControl iOS
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: macos-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Extract iOS project
+        run: |
+          unzip -q ParkControl-iOS-ReleaseCandidate-v5.zip
+          echo "Project files:"
+          find ParkControl-iOS -maxdepth 2 -type f | head -50
+
+      - name: Build iOS Simulator
+        working-directory: ParkControl-iOS
+        run: |
+          xcodebuild \
+            -project ParkControl.xcodeproj \
+            -scheme ParkControl \
+            -sdk iphonesimulator \
+            -configuration Release \
+            -derivedDataPath build \
+            CODE_SIGNING_ALLOWED=NO
+
+      - name: Package app
+        run: |
+          cd ParkControl-iOS/build/Build/Products/Release-iphonesimulator
+          zip -r ParkControl-iOS-Simulator.zip ParkControl.app
+
+      - name: Upload iOS app
+        uses: actions/upload-artifact@v4
+        with:
+          name: ParkControl-iOS-Simulator
+          path: ParkControl-iOS/build/Build/Products/Release-iphonesimulator/ParkControl-iOS-Simulator.zip
